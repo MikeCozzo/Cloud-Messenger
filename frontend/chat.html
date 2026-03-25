@@ -4,9 +4,25 @@
 <meta charset="UTF-8">
 <title>Messenger Chat</title>
 <style>
-body{font-family:Arial;margin:40px;}
-#chat-window{border:1px solid black;height:300px;overflow:auto;padding:10px;margin-bottom:10px;}
-input, select, button{margin:5px 0;padding:8px;}
+body {
+    font-family: Arial, sans-serif;
+    margin: 40px;
+}
+#chat-window {
+    border: 1px solid black;
+    height: 300px;
+    overflow: auto;
+    padding: 10px;
+    margin-bottom: 10px;
+}
+input, select, button {
+    margin: 5px 0;
+    padding: 8px;
+}
+#conversation-list {
+    display: block;
+    margin-bottom: 10px;
+}
 </style>
 </head>
 <body>
@@ -19,77 +35,102 @@ input, select, button{margin:5px 0;padding:8px;}
 
 <script>
 const API = "https://cloud-messenger.onrender.com/api";
+const WS = "wss://cloud-messenger.onrender.com/ws";
 const username = localStorage.getItem("username");
+
+if (!username) {
+    alert("Please log in first.");
+    window.location.href = "/index.html";
+}
+
 let ws;
 let currentConversation = "";
 
-/* ---------------- LOAD CONVERSATIONS ---------------- */
-async function loadConversations(){
-    const res = await fetch(`${API}/conversations/${username}`);
-    const convs = await res.json();
+// ---------------- LOAD CONVERSATIONS ----------------
+async function loadConversations() {
+    const res = await fetch(`${API}/users`);
+    const users = await res.json();
     const select = document.getElementById("conversation-list");
     select.innerHTML = "";
 
-    convs.forEach(conv => {
-        const other = conv.participants.find(u => u !== username);
-        const option = document.createElement("option");
-        option.value = other;
-        option.innerText = other;
-        select.appendChild(option);
+    // Build conversation list excluding self
+    users.forEach(user => {
+        if (user.username !== username) {
+            const option = document.createElement("option");
+            option.value = user.username;
+            option.innerText = user.username;
+            select.appendChild(option);
+        }
     });
 
-    if(convs.length > 0){
-        currentConversation = convs[0].participants.find(u => u !== username);
+    if (select.options.length > 0) {
+        currentConversation = select.options[0].value;
         loadMessages(currentConversation);
     }
 }
 
-/* ---------------- LOAD MESSAGES ---------------- */
-async function loadMessages(otherUser){
+// ---------------- LOAD MESSAGES ----------------
+async function loadMessages(otherUser) {
     currentConversation = otherUser;
     const res = await fetch(`${API}/conversations/${username}/${otherUser}`);
     const conv = await res.json();
+
     const chatWindow = document.getElementById("chat-window");
     chatWindow.innerHTML = "";
+
     conv.messages.forEach(msg => {
         const div = document.createElement("div");
         div.innerText = `${msg.sender}: ${msg.text}`;
         chatWindow.appendChild(div);
     });
+
+    chatWindow.scrollTop = chatWindow.scrollHeight;
 }
 
-/* ---------------- WEBSOCKET ---------------- */
-function connectWebSocket(){
-    ws = new WebSocket(`wss://cloud-messenger.onrender.com/ws/${username}`);
+// ---------------- WEBSOCKET ----------------
+function connectWebSocket() {
+    ws = new WebSocket(`${WS}/${username}`);
+
     ws.onopen = () => console.log("WebSocket connected");
+
     ws.onmessage = event => {
         const msg = JSON.parse(event.data);
-        if(msg.sender !== username){
+        if (msg.sender !== username && msg.sender === currentConversation) {
+            const chatWindow = document.getElementById("chat-window");
             const div = document.createElement("div");
             div.innerText = `${msg.sender}: ${msg.text}`;
-            document.getElementById("chat-window").appendChild(div);
+            chatWindow.appendChild(div);
+            chatWindow.scrollTop = chatWindow.scrollHeight;
         }
     };
+
+    ws.onclose = () => console.log("WebSocket disconnected, attempting reconnect in 2s") || setTimeout(connectWebSocket, 2000);
 }
 
-/* ---------------- SEND MESSAGE ---------------- */
-function sendMessage(){
+// ---------------- SEND MESSAGE ----------------
+function sendMessage() {
     const text = document.getElementById("msg-input").value;
-    if(!text || !currentConversation) return;
+    if (!text || !currentConversation) return;
 
-    ws.send(JSON.stringify({to: currentConversation, text}));
+    ws.send(JSON.stringify({ to: currentConversation, text }));
+
+    const chatWindow = document.getElementById("chat-window");
     const div = document.createElement("div");
     div.innerText = `${username}: ${text}`;
-    document.getElementById("chat-window").appendChild(div);
+    chatWindow.appendChild(div);
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+
     document.getElementById("msg-input").value = "";
 }
 
-/* ---------------- INIT ---------------- */
+// ---------------- INIT ----------------
 loadConversations();
 connectWebSocket();
 
-document.getElementById("conversation-list")
-.addEventListener("change",(e)=> loadMessages(e.target.value));
+// Handle conversation change
+document.getElementById("conversation-list").addEventListener("change", (e) => {
+    loadMessages(e.target.value);
+});
 </script>
 
 </body>

@@ -11,7 +11,7 @@ class UserAuth(BaseModel):
     username: str
     password: str
 
-# -------------------- REGISTER --------------------
+# register
 @router.post("/register")
 def register_user(user: UserAuth):
     if db.users.find_one({"username": user.username}):
@@ -31,7 +31,7 @@ def register_user(user: UserAuth):
     except Exception as e:
         return {"error": str(e)}
 
-# -------------------- LOGIN --------------------
+# login
 @router.post("/login")
 def login_user(user: UserAuth):
     existing_user = db.users.find_one({"username": user.username})
@@ -43,7 +43,7 @@ def login_user(user: UserAuth):
         return {"status": "Login successful"}
     return {"error": "Incorrect password"}
 
-# -------------------- LIST USERS --------------------
+# list users
 @router.get("/users")
 def get_users():
     return list(db.users.find({}, {"_id": 0, "username": 1}))

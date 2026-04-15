@@ -1,3 +1,6 @@
+let ws;
+let wsReady = false;
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -218,23 +221,35 @@ async function loadMessages(otherUser) {
 
 // ---------------- WEBSOCKET ----------------
 function connectWebSocket() {
-    ws = new WebSocket(`${WS}/${username}`);
+    ws = new WebSocket(`wss://cloud-messenger.onrender.com/ws/${username}`);
 
-    ws.onopen = () => console.log("WebSocket connected");
-
-    ws.onmessage = event => {
-        const msg = JSON.parse(event.data);
-        if (msg.sender !== username && msg.sender === currentConversation) {
-            const chatWindow = document.getElementById("chat-window");
-            const div = document.createElement("div");
-            div.classList.add("message", "them");
-            div.innerText = msg.text;
-            chatWindow.appendChild(div);
-            chatWindow.scrollTop = chatWindow.scrollHeight;
-        }
+    ws.onopen = () => {
+        console.log("WebSocket connected");
+        wsReady = true;
     };
 
-    ws.onclose = () => console.log("WebSocket disconnected, attempting reconnect in 2s") || setTimeout(connectWebSocket, 2000);
+    ws.onclose = () => {
+        console.log("WebSocket closed");
+        wsReady = false;
+
+        // IMPORTANT: auto reconnect (Render disconnects often)
+        setTimeout(connectWebSocket, 2000);
+    };
+
+    ws.onerror = (err) => {
+        console.log("WebSocket error:", err);
+        wsReady = false;
+    };
+
+    ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+
+        if (msg.sender !== username) {
+            const div = document.createElement("div");
+            div.innerText = `${msg.sender}: ${msg.text}`;
+            document.getElementById("chat-window").appendChild(div);
+        }
+    };
 }
 
 // ---------------- SEND MESSAGE ----------------
@@ -242,14 +257,20 @@ function sendMessage() {
     const text = document.getElementById("msg-input").value;
     if (!text || !currentConversation) return;
 
-    ws.send(JSON.stringify({ to: currentConversation, text }));
+    // 🔥 prevent crash
+    if (!ws || ws.readyState !== WebSocket.OPEN || !wsReady) {
+        alert("WebSocket not connected yet. Please wait...");
+        return;
+    }
 
-    const chatWindow = document.getElementById("chat-window");
+    ws.send(JSON.stringify({
+        to: currentConversation,
+        text: text
+    }));
+
     const div = document.createElement("div");
-    div.classList.add("message", "me");
-    div.innerText = text;
-    chatWindow.appendChild(div);
-    chatWindow.scrollTop = chatWindow.scrollHeight;
+    div.innerText = `${username}: ${text}`;
+    document.getElementById("chat-window").appendChild(div);
 
     document.getElementById("msg-input").value = "";
 }

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
@@ -18,16 +18,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# -------------------- API ROUTES --------------------
+# -------------------- ROUTES --------------------
 app.include_router(users_router, prefix="/api")
 app.include_router(conversations_router, prefix="/api")
 
-# -------------------- HEALTH CHECK --------------------
+# -------------------- STATUS --------------------
 @app.get("/status")
 def status():
     return {"message": "Messenger backend is running"}
 
-# -------------------- WEBSOCKET CONNECTIONS --------------------
+# -------------------- GET MESSAGES (FIXED) --------------------
+@app.get("/messages")
+def get_messages(user1: str = Query(...), user2: str = Query(...)):
+    convo = db.conversations.find_one({
+        "participants": {"$all": [user1, user2]}
+    })
+
+    if not convo:
+        return []
+
+    return convo.get("messages", [])
+
+# -------------------- WEBSOCKETS --------------------
 active_connections = {}
 
 @app.websocket("/ws/{username}")
@@ -50,10 +62,10 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
             message_obj = {
                 "sender": username,
                 "text": message_text,
-                "timestamp": datetime.utcnow()
+                "timestamp": datetime.utcnow().isoformat()
             }
 
-            # ---------------- SAVE TO MONGODB ----------------
+            # ---------------- SAVE TO MONGO ----------------
             result = db.conversations.update_one(
                 {"participants": {"$all": [username, receiver]}},
                 {"$push": {"messages": message_obj}}
@@ -65,7 +77,7 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
                     "messages": [message_obj]
                 })
 
-            # ---------------- SEND TO RECEIVER IF ONLINE ----------------
+            # ---------------- REALTIME SEND ----------------
             if receiver in active_connections:
                 try:
                     await active_connections[receiver].send_json(message_obj)

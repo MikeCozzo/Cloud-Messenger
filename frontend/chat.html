@@ -34,23 +34,11 @@
     background: #f7f7fb;
     border-right: 1px solid #eee;
     padding: 15px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .sidebar h2 {
-    margin: 0;
-    font-size: 18px;
-    color: #333;
   }
 
   #conversation-list {
     width: 100%;
     padding: 10px;
-    border-radius: 8px;
-    border: 1px solid #ddd;
-    font-size: 14px;
   }
 
   .chat {
@@ -63,7 +51,6 @@
     padding: 15px;
     border-bottom: 1px solid #eee;
     font-weight: bold;
-    color: #333;
   }
 
   #chat-window {
@@ -75,115 +62,83 @@
 
   .message {
     max-width: 70%;
-    padding: 10px 12px;
+    padding: 10px;
     margin-bottom: 10px;
-    border-radius: 12px;
-    font-size: 14px;
-    line-height: 1.4;
+    border-radius: 10px;
     word-wrap: break-word;
-    white-space: pre-wrap;
   }
 
   .me {
     background: #667eea;
     color: white;
     margin-left: auto;
-    border-bottom-right-radius: 4px;
   }
 
   .them {
     background: #e5e7eb;
-    color: #333;
     margin-right: auto;
-    border-bottom-left-radius: 4px;
   }
 
   .input-area {
     display: flex;
     padding: 10px;
-    border-top: 1px solid #eee;
     gap: 10px;
+    border-top: 1px solid #eee;
   }
 
   #msg-input {
     flex: 1;
     padding: 10px;
-    border-radius: 8px;
-    border: 1px solid #ddd;
-    font-size: 14px;
-  }
-
-  #msg-input:focus {
-    outline: none;
-    border-color: #667eea;
-    box-shadow: 0 0 0 2px rgba(102,126,234,0.2);
   }
 
   button {
-    padding: 10px 16px;
-    border: none;
-    border-radius: 8px;
+    padding: 10px;
     background: #667eea;
     color: white;
-    font-weight: bold;
+    border: none;
     cursor: pointer;
-  }
-
-  button:hover {
-    background: #5a67d8;
   }
 </style>
 </head>
+
 <body>
 
 <div class="app">
+
   <div class="sidebar">
-    <h2>Chats</h2>
+    <h3>Chats</h3>
     <select id="conversation-list"></select>
   </div>
 
   <div class="chat">
-    <div class="chat-header" id="chat-header">Select a conversation</div>
+    <div class="chat-header" id="chat-header">Select a chat</div>
+
     <div id="chat-window"></div>
 
     <div class="input-area">
-      <input id="msg-input" placeholder="Type a message">
+      <input id="msg-input" placeholder="Type message">
       <button onclick="sendMessage()">Send</button>
     </div>
   </div>
+
 </div>
 
 <script>
+
 const API = "https://cloud-messenger.onrender.com/api";
-const WS_BASE = "wss://cloud-messenger.onrender.com";
+const WS_URL = "wss://cloud-messenger.onrender.com";
 
 const username = localStorage.getItem("username");
 
 if (!username) {
-    alert("Please log in first.");
+    alert("Please log in first");
     window.location.href = "/index.html";
 }
 
-let ws = null;
+let ws;
 let currentConversation = "";
-let wsReady = false;
 
-function scrollChatToBottom() {
-    const chatWindow = document.getElementById("chat-window");
-    chatWindow.scrollTop = chatWindow.scrollHeight;
-}
-
-function renderMessage(msg, isMe = false) {
-    const div = document.createElement("div");
-    div.classList.add("message");
-    div.classList.add(isMe ? "me" : "them");
-    div.innerText = isMe ? msg.text : `${msg.sender}: ${msg.text}`;
-
-    const chatWindow = document.getElementById("chat-window");
-    chatWindow.appendChild(div);
-    scrollChatToBottom();
-}
-
+/* ---------------- USERS ---------------- */
 async function loadConversations() {
     const res = await fetch(`${API}/users`);
     const users = await res.json();
@@ -191,24 +146,22 @@ async function loadConversations() {
     const select = document.getElementById("conversation-list");
     select.innerHTML = "";
 
-    users.forEach(user => {
-        if (user.username !== username) {
-            const option = document.createElement("option");
-            option.value = user.username;
-            option.innerText = user.username;
-            select.appendChild(option);
+    users.forEach(u => {
+        if (u.username !== username) {
+            const opt = document.createElement("option");
+            opt.value = u.username;
+            opt.innerText = u.username;
+            select.appendChild(opt);
         }
     });
 
     if (select.options.length > 0) {
-        currentConversation = select.options[0].value;
-        document.getElementById("chat-header").innerText = currentConversation;
-        await loadMessages(currentConversation);
-    } else {
-        document.getElementById("chat-header").innerText = "No other users found";
+        select.value = select.options[0].value;
+        loadMessages(select.value);
     }
 }
 
+/* ---------------- MESSAGES ---------------- */
 async function loadMessages(otherUser) {
     currentConversation = otherUser;
     document.getElementById("chat-header").innerText = otherUser;
@@ -216,78 +169,91 @@ async function loadMessages(otherUser) {
     const res = await fetch(`${API}/conversations/${username}/${otherUser}`);
     const conv = await res.json();
 
-    const chatWindow = document.getElementById("chat-window");
-    chatWindow.innerHTML = "";
+    const box = document.getElementById("chat-window");
+    box.innerHTML = "";
 
     (conv.messages || []).forEach(msg => {
-        renderMessage(msg, msg.sender === username);
+        const div = document.createElement("div");
+        div.classList.add("message");
+        div.classList.add(msg.sender === username ? "me" : "them");
+        div.innerText = msg.text;
+        box.appendChild(div);
     });
 
-    scrollChatToBottom();
+    box.scrollTop = box.scrollHeight;
 }
 
+/* ---------------- WEBSOCKET ---------------- */
 function connectWebSocket() {
-    ws = new WebSocket(`${WS_BASE}/ws/${username}`);
+    ws = new WebSocket(`${WS_URL}/ws/${username}`);
 
     ws.onopen = () => {
         console.log("WebSocket connected");
-        wsReady = true;
     };
 
     ws.onmessage = (event) => {
         const msg = JSON.parse(event.data);
 
-        if (msg.sender === username) {
-            renderMessage(msg, true);
-        } else if (msg.sender === currentConversation) {
-            renderMessage(msg, false);
-        }
-    };
+        const isCurrentChat =
+            msg.sender === currentConversation ||
+            msg.sender === username;
 
-    ws.onerror = (err) => {
-        console.log("WebSocket error:", err);
-        wsReady = false;
+        if (!isCurrentChat) return;
+
+        const div = document.createElement("div");
+        div.classList.add("message");
+        div.classList.add(msg.sender === username ? "me" : "them");
+        div.innerText = msg.text;
+
+        const box = document.getElementById("chat-window");
+        box.appendChild(div);
+        box.scrollTop = box.scrollHeight;
     };
 
     ws.onclose = () => {
         console.log("WebSocket closed, reconnecting...");
-        wsReady = false;
         setTimeout(connectWebSocket, 2000);
+    };
+
+    ws.onerror = (err) => {
+        console.log("WebSocket error:", err);
     };
 }
 
+/* ---------------- SEND MESSAGE ---------------- */
 function sendMessage() {
-    const input = document.getElementById("msg-input");
-    const text = input.value.trim();
+    const text = document.getElementById("msg-input").value;
 
     if (!text || !currentConversation) return;
 
-    if (!ws || ws.readyState !== WebSocket.OPEN || !wsReady) {
-        alert("WebSocket not connected yet. Please wait...");
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+        alert("Connecting... please wait");
         return;
     }
 
-    const payload = {
+    ws.send(JSON.stringify({
         to: currentConversation,
         text: text
-    };
+    }));
 
-    ws.send(JSON.stringify(payload));
-    input.value = "";
+    const div = document.createElement("div");
+    div.classList.add("message", "me");
+    div.innerText = text;
+
+    const box = document.getElementById("chat-window");
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+
+    document.getElementById("msg-input").value = "";
 }
 
-document.getElementById("conversation-list").addEventListener("change", (e) => {
-    loadMessages(e.target.value);
-});
-
-document.getElementById("msg-input").addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-        sendMessage();
-    }
-});
-
+/* ---------------- INIT ---------------- */
 loadConversations();
 connectWebSocket();
+
+document.getElementById("conversation-list")
+.addEventListener("change", e => loadMessages(e.target.value));
+
 </script>
 
 </body>

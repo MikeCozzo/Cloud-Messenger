@@ -1,10 +1,11 @@
 <!DOCTYPE html>
+#basic page setup
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Messenger Chat</title>
-
+#UI design
 <style>
   * { box-sizing: border-box; }
 
@@ -69,7 +70,7 @@
     border-radius: 8px;
     max-width: 70%;
   }
-
+  
   .me {
     background: #667eea;
     color: white;
@@ -104,7 +105,7 @@
 </head>
 
 <body>
-
+#main app layout
 <div class="app">
 
   <!-- SIDEBAR -->
@@ -131,7 +132,12 @@
 </div>
 
 <script>
-let currentUser = prompt("Enter your username:");
+let currentUser = localStorage.getItem("username");
+
+if (!currentUser) {
+  alert("Not logged in");
+  window.location.href = "/";
+}
 let selectedUser = null;
 
 const chatWindow = document.getElementById("chat-window");
@@ -141,9 +147,7 @@ const header = document.getElementById("chat-header");
 
 let ws;
 
-// -------------------------
-// CONNECT WEBSOCKET
-// -------------------------
+//connect websocket. real time messaging connection to server
 function connectWS() {
   ws = new WebSocket(`wss://${location.host}/ws/${currentUser}`);
 
@@ -156,12 +160,10 @@ function connectWS() {
     }
   };
 }
-
+//start websocket connection
 connectWS();
 
-// -------------------------
-// LOAD USERS
-// -------------------------
+//fetch users from backend API
 async function loadUsers() {
   const res = await fetch("/api/users");
   const users = await res.json();
@@ -185,9 +187,8 @@ async function loadUsers() {
     });
 }
 
-// -------------------------
-// LOAD MESSAGES
-// -------------------------
+//fetch message history between two users
+
 async function loadMessages() {
   if (!selectedUser) return;
 
@@ -201,9 +202,7 @@ async function loadMessages() {
   messages.forEach(m => appendMessage(m.text, m.sender));
 }
 
-// -------------------------
-// RENDER MESSAGE
-// -------------------------
+//display message in UI
 function appendMessage(text, sender) {
   const div = document.createElement("div");
   div.className = "message " + (sender === currentUser ? "me" : "them");
@@ -213,9 +212,7 @@ function appendMessage(text, sender) {
   chatWindow.scrollTop = chatWindow.scrollHeight;
 }
 
-// -------------------------
-// SEND MESSAGE
-// -------------------------
+//send message
 function sendMessage() {
   const text = input.value.trim();
   if (!text || !selectedUser) return;
